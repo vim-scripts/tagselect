@@ -1,0 +1,67 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=1282
+
+If you don't like the more prompt that comes up when there are too many
+hits to the :tselect and the related commands, then try this plugin.
+Useful even with finding help topics in a help window (see :help {subject}
+and see the tip on the usage below).
+                                                                           
+  Use :Tselect command instead of :tselect to bring up the :tselect output
+  in a vim window. You can then search and press enter on the line(s) of
+  the tag which you would like to select. If you don't want to select any
+  tag you can quit by pressing "q". You can also start typing the number
+  of the tag instead of moving the cursor to the line and pressing enter.
+                                                                           
+  To select another tag index for the same tag, you can use :Tselect
+  without arguments or just use :tselect itself.
+                                                                           
+  You can also use :Stselect, :Tjump and :Stjump commands to execute
+  :stselect, :tjump and :stjump commands respectively.
+                                                                           
+  The normal mode commands, "g]" and "g^]" (g] and g_CTRL-]) and their
+  corresponding visual mode commands (v_g] and v_g_CTRL-]) and window
+  split commands (CTRL-W_g] and CTRL-W_g-CTRL-]) will be remapped to use
+  the plugin. To disable these maps, set g:no_tagselect_maps in your
+  vimrc.
+                                                                           
+  You can also use :Tags command to show the output of :tags command in
+  a vim window. You can then search and press enter on the line of the tag
+  which you would like to jump to. The plugin executes the appropriate
+  command (:tag or :pop) with the right index.
+                                                                           
+  Use g:tagselectWinSize to set the preferred size of the window. The
+  default is -1, which is to take just as much as required (up to the
+  maximum), but you can set it to empty string to make the window as high
+  as possible, or any +ve number to limit its size.
+                                                                           
+  Use g:tagselectExpandCurWord to configure if <cword> and <cWORD> tokens
+  will be expanded or not.
+Tips:
+  - You can intermix the usage of the plugin commands with that of
+    built-in commands (ie., :tn, :tp followed by a :Tselect)
+  - You can use :Ts instead of the full :Tselect, as long as there are no
+    other commands which could confuse the usage. The same applies to
+    :Tjump (:Tj) and other commands.
+  - The [Tag Select] buffer is set to to "tagselect" filetype, so this
+    allows you to customize the look & feel (colors, maps etc.) by
+    creating syntax/tagselect.vim and ftplugin/tagselect.vim files in your
+    runtime.
+  - In a help window, you can use the :Tselect /<pattern> command to do
+    very powerful and handy lookup of the help topics. Using this
+    technique to find the help topic you want is fun and easy and you are
+    sure to bump into features that you are not aware of (both in Vim and
+    in plugins that you installed). E.g., to find all the topics that have
+    "shell" in its name,
+        :h
+        :Tselect /shell
+Limitations:
+  - Executes tag commands (:tselect :stselect) twice, once to show the
+    list, and once to jump to the selected tag. This means, if the tag
+    search takes considerable time, then the time could potentially be
+    doubled (which is usually not a problem because Vim seems to cache the
+    last tag results). This could probably be fixed in Vim7 using the new
+    tag functions.
+
+
+
+
+Search_key_words: tag tags tagselect tselect stselect tjump stjump visual explorer hari krishna dara
