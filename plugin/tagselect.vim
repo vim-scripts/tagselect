@@ -1,9 +1,9 @@
 " tagselect.vim: Provides a better :tselect command.
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 12-May-2005 @ 16:12
+" Last Change: 02-Jun-2005 @ 17:27
 " Created:     18-May-2004
 " Requires:    Vim-6.3, genutils.vim(1.12)
-" Version:     1.0.7
+" Version:     1.1.3
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -11,6 +11,11 @@
 " Download From:
 "     http://www.vim.org//script.php?script_id=1282
 " Description:
+"   If you don't like the more prompt that comes up when there are too many
+"   hits to the :tselect and the related commands, then try this plugin.
+"   Useful even with finding help topics in a help window (see :help {subject}
+"   and see the tip on the usage below).
+"
 "     Use :Tselect command instead of :tselect to bring up the :tselect output
 "     in a vim window. You can then search and press enter on the line(s) of
 "     the tag which you would like to select. If you don't want to select any
@@ -24,6 +29,11 @@
 "     visual mode command (:help v_g_CTRL-]) will be remapped to use the
 "     plugin. To disable these maps, set g:no_tagselect_maps in your vimrc.
 "
+"     You can also use :Tags command to show the output of :tags command in
+"     a vim window. You can then search and press enter on the line of the tag
+"     which you would like to jump to. The plugin executes the appropriate
+"     command (:tag or :pop) with the right index.
+"
 "     Use g:tagselectWinSize to set the preferred size of the window. The
 "     default is -1, which is to take just as much as required (up to the
 "     maximum), but you can set it to empty string to make the window as high
@@ -32,18 +42,27 @@
 "     Use g:tagselectExpandCurWord to configure if <cword> and <cWORD> tokens
 "     will be expanded or not.
 "   Tips:
-"     - You can intermix the usage of :Tselect without of :tselect.
+"     - You can intermix the usage of :Tselect with that of :tselect.
 "     - You can use :Ts instead of the full :Tselect, as long as there are no
 "       other commands which could confuse the usage.
+"     - The [Tag Select] buffer is set to to "tagselect" filetype, so this
+"       allows you to customize the look & feel (colors, maps etc.) by
+"       creating syntax/tagselect.vim and ftplugin/tagselect.vim files in your
+"       runtime.
+"     - In a help window, you can use the :Tselect /<pattern> command to do
+"       very powerful and handy lookup of the help topics. Using this
+"       technique to find the help topic you want is fun and easy and you are
+"       sure to bump into features that you are not aware of (both in Vim and
+"       in plugins that you installed). E.g., to find all the topics that have
+"       "shell" in its name,
+"           :h
+"           :Tselect /.*shell.*
 "   Limitations:
 "     - Executes :tselect twice, once to show the list, and once to jump to
 "       the selected tag. This means, if the tag search takes considerable
-"       time, then the time could potentially be doubled (depends on Vim
-"       caching the results).
+"       time, then the time could potentially be doubled (which is usually not
+"       a problem because Vim seems to cache the last tag results).
 " TODO:
-"   - The :tags command seems to be pretty close to :ts, it should be possible
-"     to support that also. But the tag depth is only 20, so you should never
-"     see the more prompt, not useful enough (still allows searches etc.).
 "   - A setting to dictate the positioning of the window.
 "   - When quitting the window the cursor always goes to the below window,
 "     there should be a way to go back to the originating window.
@@ -91,7 +110,9 @@ let s:curTagName = ''
 endif
 let s:nextTagPat = '^\s\{0,2}\d\+'
 
-command! -nargs=? -complete=tag Tselect :call <SID>TagSelectMain(<f-args>)
+command! -nargs=? -complete=tag Tselect :call <SID>TagSelectMain('tselect',
+      \ <f-args>)
+command! -nargs=0 Tags :call <SID>TagSelectMain('tags')
 
 if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
       \ (! exists("no_tagselect_maps") || ! no_tagselect_maps)
@@ -99,14 +120,14 @@ if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
   vnoremap <silent> g<C-]> :<C-U>call <SID>TagSelectVisual()<CR>
 endif
 
-function! s:TagSelectMain(...) " {{{
+function! s:TagSelectMain(cmd, ...) " {{{
   let tagName = a:0 ? a:1 : ''
   if g:tagselectExpandCurWord
     " Expand <cword> and <cWORD> in arguments.
     let tagName = substitute(tagName, '<cword>\|<cWORD>',
           \ '\=expand(submatch(0))', 'g')
   endif
-  let results = GetVimCmdOutput('tselect '.tagName)
+  let results = GetVimCmdOutput(a:cmd.' '.tagName)
   if v:errmsg != '' && results =~ '^\_s*$'
     redraw | echohl ErrorMsg | echomsg v:errmsg | echohl NONE
     return 1
@@ -146,11 +167,16 @@ function! s:TagSelectMain(...) " {{{
   let lastLine = line('$')
   silent! $put =results
   " Remove the prompt.
-  silent! $delete _
+  if search('^Enter nr of choice', 'w')
+    silent! delete _
+  endif
   silent! exec '1,' . (lastLine + 1) . 'delete _'
-  call append(0, 'Current Pattern: ' . s:curTagName)
-  " Position the cursor at the current-line if there is any.
-  call search('^> ', 'w')
+  call append(0, a:cmd.':'.(s:curTagName == '' ? '' : (' ' . s:curTagName)))
+  " Position the cursor at the next tag.
+  if search('^> ', 'w') == 0
+    0
+  endif
+  call search(s:nextTagPat, 'W')
   normal! zz
 
   " Resize only if this is not the only window vertically.
@@ -179,7 +205,7 @@ function! s:TagSelectVisual() " {{{
         let selected = strpart(getline('.'), col("'<") - 1,
               \ (col("'>") - col("'<") + 1))
     endif
-    let invalid = s:TagSelectMain(selected)
+    let invalid = s:TagSelectMain('tselect', selected)
   endif
   if invalid
     " Beep and reselect the selection, just like the built-in command.
@@ -190,50 +216,82 @@ endfunction " }}}
 function! s:GetTagIndxUnderCursor() " {{{
   let tagIndex = 0
   if line('.') > 2
-    if strpart(getline('.'), 0, 3) !~ s:nextTagPat
+    if strpart(getline('.'), 0, 3) !~ s:nextTagPat && getline(1) !~ '^tags:'
       " We prefer to find the previous tag, but if there is none, then select
       " the current one again.
       if !search(s:nextTagPat, 'bW')
         call search('^>', 'bW')
       endif
     endif
-    let tagIndex = substitute(strpart(getline('.'), 0, 3), '^>\?\s\+', '', '')
+    let tagIndex = substitute(getline('.'), '^>\?\s*\(\d\+\).*', '\1', '')
           \ + 0
   endif
   return tagIndex
 endfunction
 
 function! s:SelectTagUnderCursor(bang)
-  let tagIndex = s:GetTagIndxUnderCursor()
-  call s:SelectTag(tagIndex, a:bang)
+  call s:SelectTagCount(s:GetTagIndxUnderCursor(), a:bang)
 endfunction
 
-function! s:SelectTag(index, bang)
-  let tagIndex = a:index
-  if tagIndex != 0
+function! s:SelectTagCount(tagCount, bang)
+  let tagCmd = ''
+  let tagCount = a:tagCount
+  if getline(1) =~ '^tselect:'
+    let tagCmd = 'tselect'
+  elseif getline(1) =~ '^tags:'
+    let selectedTag = tagCount
+    if selectedTag != 0
+      " Find the current tag index.
+      if search('^>', 'w')
+        -
+        let currentTag = s:GetTagIndxUnderCursor()
+        if currentTag > 0
+          if selectedTag > currentTag " we need to push.
+            let tagCount = selectedTag-currentTag
+            let tagCmd = 'tag'
+          elseif selectedTag < currentTag " we need to pop.
+            let tagCount = currentTag-selectedTag
+            let tagCmd = 'pop'
+          else
+            let tagCount = 0
+          endif
+        endif
+      endif
+    endif
+  endif
+  call s:SelectTag(tagCmd, tagCount, a:bang)
+endfunction
+
+function! s:SelectTag(cmd, tagCount, bang)
+  let tagCount = a:tagCount
+  if tagCount != 0
     let tagSelWin = winnr()
     wincmd p
-    " FIXME: Avoid doing a :tag first.
     let _cscopetag = &cscopetag
     set nocscopetag
     let _more = &more
     set nomore
     try
-      exec 'nnoremap <Plug>TagSelectTS :tselect'.a:bang.' '.s:curTagName.
-            \ '<CR>'.tagIndex.'<CR>'
-      exec "normal \<Plug>TagSelectTS"
-      " WORKAROUND: Avoid Hit ENTER prompt.
-      redraw
-      nunmap <Plug>TagSelectTS
+      if a:cmd == 'tselect'
+        " FIXME: Need to find a more direct way of jumping to selected tag.
+        exec 'nnoremap <Plug>TagSelectTS :'.a:cmd.a:bang.' '.s:curTagName.
+              \ '<CR>'.tagCount.'<CR>'
+        exec "normal \<Plug>TagSelectTS"
+        " WORKAROUND: Avoid Hit ENTER prompt.
+        redraw
+        nunmap <Plug>TagSelectTS
+      else
+        exec tagCount.a:cmd
+      endif
       "let v:errmsg = ''
       "silent exec 'tag ' . curTagPat
       "if v:errmsg == ''
-      "  exec tagIndex.'tnext'
+      "  exec tagCount.'tnext'
       "endif
     catch
       "call confirm(v:exception, '&OK', 1, 'Error')
-      echohl ErrorMsg | echo substitute(v:exception, '^[^:]\+:', '', '') |
-            \ echohl NONE
+      redraw | echohl ErrorMsg |
+            \ echomsg substitute(v:exception, '^[^:]\+:', '', '') | echohl NONE
     finally
       call CloseWindow(tagSelWin, 1)
       call RestoreWindowSettings2('TagSelect')
@@ -270,7 +328,7 @@ function! s:SetupBuf() " {{{
 
   syn clear
   set ft=tagselect
-  syn match TagSelectTagHeader "^\s*# pri kind.*"
+  syn match TagSelectTagHeader "^\s*# .*"
   syn match TagSelectCurTagLine "^>.*"
   syn match TagSelectTagLine "^\s*\d\+\s.*" contains=TagSelectTagName,TagSelectTagFile
   syn match TagSelectTagName "^\s*\d\+\s[a-zA-Z ]\{3} [a-zA-Z ]\s\+\zs\S\+\ze" contained
@@ -323,7 +381,7 @@ function! s:InputTagIndex()
     call s:Prompt(tagIndex)
   endwhile
   if !abort && tagIndex != ''
-    call s:SelectTag(tagIndex)
+    call s:SelectTagCount(tagIndex, '')
   endif
 endfunction
 
