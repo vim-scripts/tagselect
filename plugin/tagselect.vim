@@ -1,9 +1,9 @@
 " tagselect.vim: Provides a better :tselect command.
 " Author: Hari Krishna (hari_vim at yahoo dot com)
-" Last Change: 02-Jun-2005 @ 17:27
+" Last Change: 09-Jun-2005 @ 15:08
 " Created:     18-May-2004
 " Requires:    Vim-6.3, genutils.vim(1.12)
-" Version:     1.1.3
+" Version:     1.2.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -25,9 +25,14 @@
 "     To select another tag index for the same tag, you can use :Tselect
 "     without arguments or just use :tselect itself.
 "
-"     The normal mode command, "g^]" (:help g_CTRL-]) and the corresponding
-"     visual mode command (:help v_g_CTRL-]) will be remapped to use the
-"     plugin. To disable these maps, set g:no_tagselect_maps in your vimrc.
+"     You can also use :Stselect, :Tjump and :Stjump commands to execute
+"     :stselect, :tjump and :stjump commands respectively.
+"
+"     The normal mode commands, "g]" and "g^]" (g] and g_CTRL-]) and their
+"     corresponding visual mode commands (v_g] and v_g_CTRL-]) and window
+"     split commands (CTRL-W_g] and CTRL-W_g-CTRL-]) will be remapped to use
+"     the plugin. To disable these maps, set g:no_tagselect_maps in your
+"     vimrc.
 "
 "     You can also use :Tags command to show the output of :tags command in
 "     a vim window. You can then search and press enter on the line of the tag
@@ -42,9 +47,11 @@
 "     Use g:tagselectExpandCurWord to configure if <cword> and <cWORD> tokens
 "     will be expanded or not.
 "   Tips:
-"     - You can intermix the usage of :Tselect with that of :tselect.
+"     - You can intermix the usage of the plugin commands with that of
+"       built-in commands (ie., :tn, :tp followed by a :Tselect)
 "     - You can use :Ts instead of the full :Tselect, as long as there are no
-"       other commands which could confuse the usage.
+"       other commands which could confuse the usage. The same applies to
+"       :Tjump (:Tj) and other commands.
 "     - The [Tag Select] buffer is set to to "tagselect" filetype, so this
 "       allows you to customize the look & feel (colors, maps etc.) by
 "       creating syntax/tagselect.vim and ftplugin/tagselect.vim files in your
@@ -56,12 +63,14 @@
 "       in plugins that you installed). E.g., to find all the topics that have
 "       "shell" in its name,
 "           :h
-"           :Tselect /.*shell.*
+"           :Tselect /shell
 "   Limitations:
-"     - Executes :tselect twice, once to show the list, and once to jump to
-"       the selected tag. This means, if the tag search takes considerable
-"       time, then the time could potentially be doubled (which is usually not
-"       a problem because Vim seems to cache the last tag results).
+"     - Executes tag commands (:tselect :stselect) twice, once to show the
+"       list, and once to jump to the selected tag. This means, if the tag
+"       search takes considerable time, then the time could potentially be
+"       doubled (which is usually not a problem because Vim seems to cache the
+"       last tag results). This could probably be fixed in Vim7 using the new
+"       tag functions.
 " TODO:
 "   - A setting to dictate the positioning of the window.
 "   - When quitting the window the cursor always goes to the below window,
@@ -112,12 +121,24 @@ let s:nextTagPat = '^\s\{0,2}\d\+'
 
 command! -nargs=? -complete=tag Tselect :call <SID>TagSelectMain('tselect',
       \ <f-args>)
+command! -nargs=? -complete=tag Stselect :call <SID>TagSelectMain('stselect',
+      \ <f-args>)
+command! -nargs=? -complete=tag Tjump :call <SID>TagSelectMain('tjump',
+      \ <f-args>)
+command! -nargs=? -complete=tag Stjump :call <SID>TagSelectMain('stjump',
+      \ <f-args>)
 command! -nargs=0 Tags :call <SID>TagSelectMain('tags')
 
 if (! exists("no_plugin_maps") || ! no_plugin_maps) &&
       \ (! exists("no_tagselect_maps") || ! no_tagselect_maps)
-  nnoremap <silent> g<C-]> :Tselect <cword><CR>
-  vnoremap <silent> g<C-]> :<C-U>call <SID>TagSelectVisual()<CR>
+  nnoremap <silent> g] :Tselect <cword><CR>
+  vnoremap <silent> g] :<C-U>call <SID>TagSelectVisual('tselect')<CR>
+  nnoremap <silent> <C-W>g] :Stselect <cword><CR>
+  vnoremap <silent> <C-W>g] :<C-U>call <SID>TagSelectVisual('stselect')<CR>
+  nnoremap <silent> g<C-]> :Tjump <cword><CR>
+  vnoremap <silent> g<C-]> :<C-U>call <SID>TagSelectVisual('tjump')<CR>
+  nnoremap <silent> <C-W>g<C-]> :Stjump <cword><CR>
+  vnoremap <silent> <C-W>g<C-]> :<C-U>call <SID>TagSelectVisual('stjump')<CR>
 endif
 
 function! s:TagSelectMain(cmd, ...) " {{{
@@ -131,6 +152,11 @@ function! s:TagSelectMain(cmd, ...) " {{{
   if v:errmsg != '' && results =~ '^\_s*$'
     redraw | echohl ErrorMsg | echomsg v:errmsg | echohl NONE
     return 1
+  endif
+  " This means, there was only one hit, and Vim must have already jumped to
+  " the jump. Don't do anything else.
+  if a:cmd =~ 'jump' && results =~ '^\_s*$'
+    return 0
   endif
 
   let _isf = &isfname
@@ -193,7 +219,7 @@ endfunction " }}}
 
 " Function to use the current visual selection as the tag. Should be called
 " only from the visual mode.
-function! s:TagSelectVisual() " {{{
+function! s:TagSelectVisual(tagCmd) " {{{
   let invalid = 0
   if line("'<") != line("'>")
     let invalid = 1
@@ -205,7 +231,7 @@ function! s:TagSelectVisual() " {{{
         let selected = strpart(getline('.'), col("'<") - 1,
               \ (col("'>") - col("'<") + 1))
     endif
-    let invalid = s:TagSelectMain('tselect', selected)
+    let invalid = s:TagSelectMain(a:tagCmd, selected)
   endif
   if invalid
     " Beep and reselect the selection, just like the built-in command.
@@ -238,6 +264,12 @@ function! s:SelectTagCount(tagCount, bang)
   let tagCount = a:tagCount
   if getline(1) =~ '^tselect:'
     let tagCmd = 'tselect'
+  elseif getline(1) =~ '^stselect:'
+    let tagCmd = 'stselect'
+  elseif getline(1) =~ '^tjump:'
+    let tagCmd = 'tselect'
+  elseif getline(1) =~ '^stjump:'
+    let tagCmd = 'stselect'
   elseif getline(1) =~ '^tags:'
     let selectedTag = tagCount
     if selectedTag != 0
@@ -271,8 +303,18 @@ function! s:SelectTag(cmd, tagCount, bang)
     set nocscopetag
     let _more = &more
     set nomore
+    " FIXME: Why is lazyredraw not having any effect?
+    let _lazyredraw = &lazyredraw
+    set lazyredraw
+    let tagWindowOpen = 1
     try
-      if a:cmd == 'tselect'
+      if a:cmd != 'tag' && a:cmd != 'pop'
+        if a:cmd == 'stselect'
+          call CloseWindow(tagSelWin, 1)
+          call RestoreWindowSettings2('TagSelect')
+          let tagWindowOpen = 0
+        endif
+
         " FIXME: Need to find a more direct way of jumping to selected tag.
         exec 'nnoremap <Plug>TagSelectTS :'.a:cmd.a:bang.' '.s:curTagName.
               \ '<CR>'.tagCount.'<CR>'
@@ -293,8 +335,11 @@ function! s:SelectTag(cmd, tagCount, bang)
       redraw | echohl ErrorMsg |
             \ echomsg substitute(v:exception, '^[^:]\+:', '', '') | echohl NONE
     finally
-      call CloseWindow(tagSelWin, 1)
-      call RestoreWindowSettings2('TagSelect')
+      if tagWindowOpen
+        call CloseWindow(tagSelWin, 1)
+        call RestoreWindowSettings2('TagSelect')
+      endif
+      let &lazyredraw = _lazyredraw
       let &more = _more
       let &cscopetag = _cscopetag
     endtry
